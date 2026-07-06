@@ -1,6 +1,6 @@
 <script setup>
-import { reactive, watch, toRefs } from 'vue'
-import { useExpensesStore } from '../store/expenses'
+import { reactive, watch } from 'vue'
+import { useTransactionsStore } from '../store/transactions'
 
 const props = defineProps({
   initial: { type: Object, default: null },
@@ -8,11 +8,12 @@ const props = defineProps({
 })
 const emit = defineEmits(['submit'])
 
-const store = useExpensesStore()
+const store = useTransactionsStore()
 
 const state = reactive({
   description: '',
-  category: '',
+  categoryId: '',
+  type: 'expense',
   amount: '',
   date: new Date().toISOString().slice(0, 10),
   errors: {},
@@ -22,7 +23,8 @@ watch(
   () => props.initial,
   (val) => {
     state.description = val?.description || ''
-    state.category = val?.category || ''
+    state.categoryId = val?.categoryId || ''
+    state.type = val?.type || 'expense'
     state.amount = val?.amount ?? ''
     state.date = val?.date || new Date().toISOString().slice(0, 10)
     state.errors = {}
@@ -33,7 +35,8 @@ watch(
 function submitForm() {
   const payload = {
     description: String(state.description).trim(),
-    category: state.category,
+    categoryId: state.categoryId,
+    type: state.type,
     amount: Number(state.amount),
     date: state.date,
   }
@@ -45,6 +48,27 @@ function submitForm() {
 
 <template>
   <form @submit.prevent="submitForm" class="space-y-4">
+    <div>
+      <span class="block text-sm font-medium mb-1">Type</span>
+      <div class="inline-flex rounded-md border border-gray-300 overflow-hidden">
+        <button
+          type="button"
+          class="px-4 py-2 text-sm"
+          :class="state.type === 'expense' ? 'bg-primary text-white' : 'bg-white hover:bg-gray-100'"
+          @click="state.type = 'expense'"
+        >
+          Expense
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 text-sm border-l border-gray-300"
+          :class="state.type === 'income' ? 'bg-green-600 text-white' : 'bg-white hover:bg-gray-100'"
+          @click="state.type = 'income'"
+        >
+          Income
+        </button>
+      </div>
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-medium mb-1">Description</label>
@@ -53,15 +77,15 @@ function submitForm() {
       </div>
       <div>
         <label class="block text-sm font-medium mb-1">Category</label>
-        <select v-model="state.category" class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
+        <select v-model="state.categoryId" class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="" disabled>Select</option>
-          <option v-for="c in store.categories" :key="c" :value="c">{{ c }}</option>
+          <option v-for="c in store.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
         </select>
-        <p v-if="state.errors.category" class="text-sm text-red-600 mt-1">{{ state.errors.category }}</p>
+        <p v-if="state.errors.categoryId" class="text-sm text-red-600 mt-1">{{ state.errors.categoryId }}</p>
       </div>
       <div>
         <label class="block text-sm font-medium mb-1">Amount</label>
-        <input v-model.number="state.amount" type="number" step="0.01" min="0" class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" :placeholder="useExpensesStore().formatCurrency(0).replace(/\d+[.,]?\d*/, '0.00')" />
+        <input v-model.number="state.amount" type="number" step="0.01" min="0" class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary" :placeholder="store.formatCurrency(0).replace(/\d+[.,]?\d*/, '0.00')" />
         <p v-if="state.errors.amount" class="text-sm text-red-600 mt-1">{{ state.errors.amount }}</p>
       </div>
       <div>

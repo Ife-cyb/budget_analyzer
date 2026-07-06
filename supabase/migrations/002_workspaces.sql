@@ -1,27 +1,30 @@
--- Budget Analyzer schema — fresh install (Phase 2 workspace model).
--- Idempotent: safe to re-run end-to-end on the same project.
--- Existing legacy databases must NOT run this file; use
--- supabase/migrations/002_workspaces.sql instead.
+-- 002_workspaces.sql — Phase 2 Task 1: workspace model upgrade
 --
--- Note: fresh installs do not get the deprecated legacy tables/columns that
--- upgraded databases still carry (`transactions.category` text, `budgets`).
--- The app never reads those; they are dropped from upgraded DBs in a later
--- migration.
+-- Upgrade script for a LIVE database on the legacy schema
+-- (profiles / categories / expenses / budgets, user_id-scoped RLS).
+--
+-- BEFORE RUNNING:
+--   1. Back up the database (pg_dump or dashboard export).
+--   2. Rehearse on a staging project seeded with the current schema.sql.
+--
+-- Runs as ONE transaction: any failure rolls the whole migration back.
+-- This script is one-shot (renames are not idempotent) — do not re-run
+-- after a successful commit.
 
-create extension if not exists "pgcrypto";
+begin;
 
 --------------------------------------------------------------------------
--- Tables
+-- 0. Safety net: ensure Phase 1 income support exists.
+--    No-op on a database where the `type` column was already added.
 --------------------------------------------------------------------------
 
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  email text,
-  full_name text,
-  currency text not null default 'USD',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+alter table public.expenses
+  add column if not exists type text not null default 'expense'
+  check (type in ('expense', 'income'));
+
+--------------------------------------------------------------------------
+-- 1a. Workspaces + membership
+--------------------------------------------------------------------------
 
 create table if not exists public.workspaces (
   id uuid primary key default gen_random_uuid(),
@@ -43,58 +46,6 @@ create table if not exists public.workspace_members (
 create index if not exists workspace_members_user_idx
   on public.workspace_members (user_id);
 
-create table if not exists public.categories (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  created_by uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  name text not null,
-  created_at timestamptz not null default now()
-);
-
-create unique index if not exists categories_ws_name_key
-  on public.categories (workspace_id, name);
-
-create table if not exists public.transactions (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  created_by uuid not null references auth.users(id) on delete cascade default auth.uid(),
-  category_id uuid not null references public.categories(id),
-  description text not null,
-  type text not null default 'expense' check (type in ('expense', 'income')),
-  amount numeric(12, 2) not null check (amount > 0),
-  date date not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists transactions_ws_date_idx
-  on public.transactions (workspace_id, date desc);
-
-create table if not exists public.budgets_monthly (
-  id uuid primary key default gen_random_uuid(),
-  workspace_id uuid not null references public.workspaces(id) on delete cascade,
-  category_id uuid not null references public.categories(id) on delete cascade,
-  month date not null check (date_trunc('month', month) = month),
-  amount numeric(12,2) not null check (amount >= 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (workspace_id, category_id, month)
-);
-
---------------------------------------------------------------------------
--- Functions + triggers
---------------------------------------------------------------------------
-
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
 -- Security definer helpers: REQUIRED to avoid recursive RLS on workspace_members
 create or replace function public.is_member(ws uuid)
 returns boolean language sql security definer stable
@@ -102,17 +53,6 @@ set search_path = public as $$
   select exists (
     select 1 from workspace_members
     where workspace_id = ws and user_id = auth.uid()
-  );
-$$;
-
-create or replace function public.shares_workspace_with(target uuid)
-returns boolean language sql security definer stable
-set search_path = public as $$
-  select exists (
-    select 1
-    from workspace_members me
-    join workspace_members them on them.workspace_id = me.workspace_id
-    where me.user_id = auth.uid() and them.user_id = target
   );
 $$;
 
@@ -142,7 +82,7 @@ create trigger on_workspace_created
 after insert on public.workspaces
 for each row execute function public.handle_new_workspace();
 
--- Every new profile gets a personal workspace
+-- Auto-create a personal workspace for NEW users (profile creation path)
 create or replace function public.handle_new_profile()
 returns trigger language plpgsql security definer
 set search_path = public as $$
@@ -162,54 +102,137 @@ create trigger on_profile_created
 after insert on public.profiles
 for each row execute function public.handle_new_profile();
 
-drop trigger if exists set_profiles_updated_at on public.profiles;
-create trigger set_profiles_updated_at
-before update on public.profiles
-for each row execute function public.set_updated_at();
-
+-- Keep updated_at fresh on the new tables
 drop trigger if exists set_workspaces_updated_at on public.workspaces;
 create trigger set_workspaces_updated_at
 before update on public.workspaces
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_transactions_updated_at on public.transactions;
-create trigger set_transactions_updated_at
-before update on public.transactions
-for each row execute function public.set_updated_at();
+--------------------------------------------------------------------------
+-- 1b. Backfill: one personal workspace per existing user
+--     (on_workspace_created creates the owner membership rows)
+--------------------------------------------------------------------------
+
+insert into public.workspaces (name, type, created_by)
+select coalesce(nullif(p.full_name, ''), 'Personal'), 'personal', p.id
+from public.profiles p
+where not exists (
+  select 1 from public.workspaces w
+  where w.created_by = p.id and w.type = 'personal'
+);
+
+--------------------------------------------------------------------------
+-- 1c. Categories → workspace-scoped with stable IDs
+--------------------------------------------------------------------------
+
+alter table public.categories
+  add column if not exists workspace_id uuid references public.workspaces(id) on delete cascade;
+
+update public.categories c
+set workspace_id = w.id
+from public.workspaces w
+where w.created_by = c.user_id and w.type = 'personal'
+  and c.workspace_id is null;
+
+alter table public.categories alter column workspace_id set not null;
+alter table public.categories rename column user_id to created_by;
+alter table public.categories drop constraint if exists categories_user_id_name_key;
+create unique index if not exists categories_ws_name_key
+  on public.categories (workspace_id, name);
+
+--------------------------------------------------------------------------
+-- 1d. Expenses → transactions with category FK
+--------------------------------------------------------------------------
+
+alter table public.expenses rename to transactions;
+alter table public.transactions rename column user_id to created_by;
+alter table public.transactions
+  add column if not exists workspace_id uuid references public.workspaces(id) on delete cascade,
+  add column if not exists category_id uuid references public.categories(id);
+
+update public.transactions t
+set workspace_id = w.id
+from public.workspaces w
+where w.created_by = t.created_by and w.type = 'personal'
+  and t.workspace_id is null;
+
+alter table public.transactions alter column workspace_id set not null;
+
+-- Create any category rows missing for free-text names, then link
+insert into public.categories (workspace_id, created_by, name)
+select distinct t.workspace_id, t.created_by, t.category
+from public.transactions t
+where t.category_id is null
+on conflict do nothing;
+
+update public.transactions t
+set category_id = c.id
+from public.categories c
+where c.workspace_id = t.workspace_id
+  and c.name = t.category
+  and t.category_id is null;
+
+alter table public.transactions alter column category_id set not null;
+-- Keep the legacy `category` text column for now (deprecated); drop in a later
+-- migration after production verification. The app stops writing it, so it
+-- must allow nulls for new rows.
+alter table public.transactions alter column category drop not null;
+
+create index if not exists transactions_ws_date_idx
+  on public.transactions (workspace_id, date desc);
+
+--------------------------------------------------------------------------
+-- 1e. Monthly budgets
+--------------------------------------------------------------------------
+
+create table if not exists public.budgets_monthly (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  category_id uuid not null references public.categories(id) on delete cascade,
+  month date not null check (date_trunc('month', month) = month),
+  amount numeric(12,2) not null check (amount >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (workspace_id, category_id, month)
+);
 
 drop trigger if exists set_budgets_monthly_updated_at on public.budgets_monthly;
 create trigger set_budgets_monthly_updated_at
 before update on public.budgets_monthly
 for each row execute function public.set_updated_at();
 
+-- Seed current month from legacy single-limit budgets
+insert into public.budgets_monthly (workspace_id, category_id, month, amount)
+select w.id, c.id, date_trunc('month', now())::date, b.amount
+from public.budgets b
+join public.workspaces w on w.created_by = b.user_id and w.type = 'personal'
+join public.categories c on c.workspace_id = w.id and c.name = b.category
+on conflict do nothing;
+-- Keep legacy `budgets` table (deprecated); drop later.
+
 --------------------------------------------------------------------------
--- Row level security
+-- 1f. RLS rewrite
 --------------------------------------------------------------------------
 
-alter table public.profiles enable row level security;
+-- Drop old user_id-based policies (expenses policies moved with the rename)
+drop policy if exists "Categories are readable by owner" on public.categories;
+drop policy if exists "Categories are insertable by owner" on public.categories;
+drop policy if exists "Categories are updatable by owner" on public.categories;
+drop policy if exists "Categories are deletable by owner" on public.categories;
+
+drop policy if exists "Expenses are readable by owner" on public.transactions;
+drop policy if exists "Expenses are insertable by owner" on public.transactions;
+drop policy if exists "Expenses are updatable by owner" on public.transactions;
+drop policy if exists "Expenses are deletable by owner" on public.transactions;
+
+drop policy if exists "Budgets are readable by owner" on public.budgets;
+drop policy if exists "Budgets are insertable by owner" on public.budgets;
+drop policy if exists "Budgets are updatable by owner" on public.budgets;
+drop policy if exists "Budgets are deletable by owner" on public.budgets;
+
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;
-alter table public.categories enable row level security;
-alter table public.transactions enable row level security;
 alter table public.budgets_monthly enable row level security;
-
--- profiles
-drop policy if exists "Profiles are readable by owner" on public.profiles;
-drop policy if exists "Profiles are readable by owner or workspace peers" on public.profiles;
-create policy "Profiles are readable by owner or workspace peers"
-on public.profiles for select
-using (auth.uid() = id or public.shares_workspace_with(id));
-
-drop policy if exists "Profiles are insertable by owner" on public.profiles;
-create policy "Profiles are insertable by owner"
-on public.profiles for insert
-with check (auth.uid() = id);
-
-drop policy if exists "Profiles are updatable by owner" on public.profiles;
-create policy "Profiles are updatable by owner"
-on public.profiles for update
-using (auth.uid() = id)
-with check (auth.uid() = id);
 
 -- workspaces
 drop policy if exists "workspaces: members read" on public.workspaces;
@@ -295,3 +318,15 @@ create policy "budgets: admins update" on public.budgets_monthly
 drop policy if exists "budgets: admins delete" on public.budgets_monthly;
 create policy "budgets: admins delete" on public.budgets_monthly
   for delete using (public.has_role(workspace_id, array['owner','admin']));
+
+commit;
+
+--------------------------------------------------------------------------
+-- Post-migration sanity checks (run manually, expect no rows / zero counts)
+--------------------------------------------------------------------------
+-- select count(*) from public.transactions where category_id is null;
+-- select count(*) from public.transactions where workspace_id is null;
+-- select count(*) from public.categories where workspace_id is null;
+-- select p.id from public.profiles p
+--   left join public.workspaces w on w.created_by = p.id and w.type = 'personal'
+--   where w.id is null;
