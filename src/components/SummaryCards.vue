@@ -1,12 +1,14 @@
 <script setup>
 import { computed } from 'vue'
-import { useExpensesStore } from '../store/expenses'
+import { useTransactionsStore } from '../store/transactions'
 
-const store = useExpensesStore()
+const store = useTransactionsStore()
 
-const total = computed(() => store.totalSpent)
+const income = computed(() => store.totalIncome)
+const expenses = computed(() => store.totalSpent)
+const net = computed(() => store.netCashFlow)
 const topCategory = computed(() => store.topCategory)
-const count = computed(() => store.filteredExpenses.length)
+const count = computed(() => store.filteredTransactions.length)
 
 const mom = computed(() => {
   const series = store.monthlySeries
@@ -21,10 +23,20 @@ const mom = computed(() => {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     <div class="bg-white rounded-lg shadow p-4 min-w-0">
-      <p class="text-xs uppercase tracking-wide text-gray-500">Total Spent</p>
-      <p class="mt-2 text-2xl font-semibold truncate">{{ store.formatCurrency(total) }}</p>
+      <p class="text-xs uppercase tracking-wide text-gray-500">Income</p>
+      <p class="mt-2 text-2xl font-semibold truncate text-green-600">{{ store.formatCurrency(income) }}</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 min-w-0">
+      <p class="text-xs uppercase tracking-wide text-gray-500">Expenses</p>
+      <p class="mt-2 text-2xl font-semibold truncate">{{ store.formatCurrency(expenses) }}</p>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4 min-w-0">
+      <p class="text-xs uppercase tracking-wide text-gray-500">Net Cash Flow</p>
+      <p class="mt-2 text-2xl font-semibold truncate" :class="net >= 0 ? 'text-green-600' : 'text-red-600'">
+        {{ store.formatCurrency(net) }}
+      </p>
     </div>
     <div class="bg-white rounded-lg shadow p-4 min-w-0">
       <p class="text-xs uppercase tracking-wide text-gray-500">Top Category</p>
@@ -36,7 +48,7 @@ const mom = computed(() => {
       <p class="mt-2 text-2xl font-semibold">{{ count }}</p>
     </div>
     <div class="bg-white rounded-lg shadow p-4 min-w-0">
-      <p class="text-xs uppercase tracking-wide text-gray-500">MoM Change</p>
+      <p class="text-xs uppercase tracking-wide text-gray-500">MoM Spending</p>
       <div v-if="mom" class="mt-2 flex items-baseline gap-2 min-w-0">
         <p class="text-2xl font-semibold truncate" :class="mom.diff >= 0 ? 'text-red-600' : 'text-green-600'">
           {{ mom.diff >= 0 ? '+' : '' }}{{ store.formatCurrency(mom.diff) }}

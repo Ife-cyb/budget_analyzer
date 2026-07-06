@@ -4,6 +4,7 @@ import { useAuthStore } from './store/auth'
 const Dashboard = () => import('./views/Dashboard.vue')
 const AddExpense = () => import('./views/AddExpense.vue')
 const Reports = () => import('./views/Reports.vue')
+const Categories = () => import('./views/Categories.vue')
 const Login = () => import('./views/auth/Login.vue')
 const Register = () => import('./views/auth/Register.vue')
 const Logout = () => import('./views/auth/Logout.vue')
@@ -15,6 +16,7 @@ const router = createRouter({
     { path: '/add', name: 'AddExpense', component: AddExpense, meta: { requiresAuth: true } },
     { path: '/add/:id', name: 'EditExpense', component: AddExpense, meta: { requiresAuth: true } },
     { path: '/reports', name: 'Reports', component: Reports, meta: { requiresAuth: true } },
+    { path: '/categories', name: 'Categories', component: Categories, meta: { requiresAuth: true } },
     { path: '/login', name: 'Login', component: Login, meta: { guestOnly: true } },
     { path: '/register', name: 'Register', component: Register, meta: { guestOnly: true } },
     { path: '/logout', name: 'Logout', component: Logout, meta: { requiresAuth: true } },

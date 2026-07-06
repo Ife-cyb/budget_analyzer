@@ -2,17 +2,20 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../store/auth'
-import { useExpensesStore } from '../../store/expenses'
+import { useTransactionsStore } from '../../store/transactions'
+import { useWorkspaceStore } from '../../store/workspace'
 
 const authStore = useAuthStore()
-const expensesStore = useExpensesStore()
+const transactionsStore = useTransactionsStore()
+const workspaceStore = useWorkspaceStore()
 const router = useRouter()
 const error = ref('')
 
 onMounted(async () => {
   try {
     await authStore.signOut()
-    expensesStore.reset()
+    transactionsStore.reset()
+    workspaceStore.reset()
     router.replace('/login')
   } catch (err) {
     error.value = err?.message || 'Unable to sign out.'

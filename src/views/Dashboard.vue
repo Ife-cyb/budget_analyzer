@@ -1,12 +1,12 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue'
-import { useExpensesStore } from '../store/expenses'
+import { useTransactionsStore } from '../store/transactions'
 import SummaryCards from '../components/SummaryCards.vue'
 import ExpenseList from '../components/ExpenseList.vue'
 import Charts from '../components/Charts.vue'
 import BudgetPlanner from '../components/BudgetPlanner.vue'
 
-const store = useExpensesStore()
+const store = useTransactionsStore()
 const selectedCategory = ref('All')
 const selectedMonth = ref('All')
 
@@ -19,7 +19,7 @@ onMounted(async () => {
   }
 })
 
-const categories = computed(() => ['All', ...store.categories])
+const categories = computed(() => ['All', ...store.categoryNames])
 const months = computed(() => store.monthsAvailable)
 
 function applyFilters() {
@@ -54,7 +54,7 @@ function applyFilters() {
             <option v-for="m in months" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
-        <ExpenseList :expenses="store.filteredExpenses.slice(0, 8)" showHeader title="Recent Transactions" />
+        <ExpenseList :transactions="store.filteredTransactions.slice(0, 8)" showHeader title="Recent Transactions" />
       </div>
       <div class="space-y-4">
         <BudgetPlanner />

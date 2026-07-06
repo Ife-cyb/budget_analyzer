@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { useExpensesStore } from '../store/expenses'
+import { useTransactionsStore } from '../store/transactions'
 import { Pie, Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -19,7 +19,7 @@ const props = defineProps({
   type: { type: String, default: 'pie' },
 })
 
-const store = useExpensesStore()
+const store = useTransactionsStore()
 
 const pieData = computed(() => {
   const byCat = store.spendByCategory
@@ -39,16 +39,19 @@ const pieData = computed(() => {
 })
 
 const barData = computed(() => {
-  const series = store.monthlySeries
-  const labels = series.map(([m]) => m)
-  const values = series.map(([, v]) => v)
+  const series = store.monthlyTypeSeries
   return {
-    labels,
+    labels: series.map((s) => s.month),
     datasets: [
       {
-        label: 'Monthly Trend',
-        data: values,
+        label: 'Expenses',
+        data: series.map((s) => s.expense),
         backgroundColor: '#2563eb',
+      },
+      {
+        label: 'Income',
+        data: series.map((s) => s.income),
+        backgroundColor: '#16a34a',
       },
     ],
   }

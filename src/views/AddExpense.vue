@@ -3,9 +3,11 @@ import { ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ExpenseForm from '../components/ExpenseForm.vue'
 import ExpenseList from '../components/ExpenseList.vue'
-import { useExpensesStore } from '../store/expenses'
+import { useTransactionsStore } from '../store/transactions'
+import { useWorkspaceStore } from '../store/workspace'
 
-const store = useExpensesStore()
+const store = useTransactionsStore()
+const workspaceStore = useWorkspaceStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -17,10 +19,16 @@ const formError = ref('')
 function loadFromRoute() {
   const id = route.params.id
   if (id) {
-    const e = store.expenses.find((x) => x.id === id)
-    if (e) {
-      editingId.value = e.id
-      formInitial.value = { description: e.description, category: e.category, amount: e.amount, date: e.date }
+    const t = store.transactions.find((x) => x.id === id)
+    if (t) {
+      editingId.value = t.id
+      formInitial.value = {
+        description: t.description,
+        categoryId: t.categoryId,
+        type: t.type,
+        amount: t.amount,
+        date: t.date,
+      }
     }
   } else {
     editingId.value = null
@@ -44,27 +52,27 @@ async function onSubmit(values) {
 
   try {
     if (editingId.value) {
-      await store.updateExpense(editingId.value, values)
+      await store.updateTransaction(editingId.value, values)
       router.push('/')
     } else {
-      await store.addExpense(values)
+      await store.addTransaction(values)
     }
   } catch (error) {
-    formError.value = error?.message || store.error || 'Unable to save expense.'
+    formError.value = error?.message || store.error || 'Unable to save transaction.'
   } finally {
     submitting.value = false
   }
 }
 
-function onEdit(expense) {
-  router.push(`/add/${expense.id}`)
+function onEdit(transaction) {
+  router.push(`/add/${transaction.id}`)
 }
 </script>
 
 <template>
   <div class="max-w-4xl mx-auto px-4 py-6 space-y-6">
     <header class="flex items-center justify-between">
-      <h2 class="text-xl font-semibold">{{ editingId ? 'Edit Expense' : 'Add Expense' }}</h2>
+      <h2 class="text-xl font-semibold">{{ editingId ? 'Edit Transaction' : 'Add Transaction' }}</h2>
       <RouterLink to="/" class="text-primary">Back to Dashboard</RouterLink>
     </header>
 
@@ -76,12 +84,15 @@ function onEdit(expense) {
       {{ formError || store.error }}
     </p>
 
-    <div class="bg-white rounded-lg shadow p-4">
+    <div v-if="workspaceStore.canWrite" class="bg-white rounded-lg shadow p-4">
       <ExpenseForm :initial="formInitial" :submitting="submitting || store.saving" @submit="onSubmit" />
     </div>
+    <p v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+      You have view-only access in this workspace.
+    </p>
 
     <div class="bg-white rounded-lg shadow p-4">
-      <ExpenseList :expenses="store.filteredExpenses" @edit="onEdit" />
+      <ExpenseList :transactions="store.filteredTransactions" @edit="onEdit" />
     </div>
   </div>
 </template>

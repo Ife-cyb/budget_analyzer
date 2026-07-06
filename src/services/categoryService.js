@@ -10,29 +10,35 @@ export const DEFAULT_CATEGORIES = [
   'Other',
 ]
 
-const CATEGORY_SELECT = 'id, name, created_at'
+const CATEGORY_SELECT = 'id, name, created_by, created_at'
 
-function normalizeCategories(rows = []) {
-  return rows.map((row) => row.name).filter(Boolean)
+function normalizeCategory(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  }
 }
 
-export async function listCategories(userId) {
+export async function listCategories(workspaceId) {
   const { data, error } = await getSupabaseClient()
     .from('categories')
     .select(CATEGORY_SELECT)
-    .eq('user_id', userId)
+    .eq('workspace_id', workspaceId)
     .order('name', { ascending: true })
 
   if (error) throw error
-  return normalizeCategories(data)
+  return data.map(normalizeCategory)
 }
 
-export async function ensureDefaultCategories(userId) {
-  const existing = await listCategories(userId)
+export async function ensureDefaultCategories(workspaceId, userId) {
+  const existing = await listCategories(workspaceId)
   if (existing.length > 0) return existing
 
   const rows = DEFAULT_CATEGORIES.map((name) => ({
-    user_id: userId,
+    workspace_id: workspaceId,
+    created_by: userId,
     name,
   }))
 
@@ -40,9 +46,43 @@ export async function ensureDefaultCategories(userId) {
     .from('categories')
     .upsert(rows, {
       ignoreDuplicates: true,
-      onConflict: 'user_id,name',
+      onConflict: 'workspace_id,name',
     })
 
   if (error) throw error
-  return listCategories(userId)
+  return listCategories(workspaceId)
+}
+
+export async function createCategory(workspaceId, userId, name) {
+  const { data, error } = await getSupabaseClient()
+    .from('categories')
+    .insert({ workspace_id: workspaceId, created_by: userId, name })
+    .select(CATEGORY_SELECT)
+    .single()
+
+  if (error) throw error
+  return normalizeCategory(data)
+}
+
+export async function renameCategory(workspaceId, id, name) {
+  const { data, error } = await getSupabaseClient()
+    .from('categories')
+    .update({ name })
+    .eq('id', id)
+    .eq('workspace_id', workspaceId)
+    .select(CATEGORY_SELECT)
+    .single()
+
+  if (error) throw error
+  return normalizeCategory(data)
+}
+
+export async function deleteCategory(workspaceId, id) {
+  const { error } = await getSupabaseClient()
+    .from('categories')
+    .delete()
+    .eq('id', id)
+    .eq('workspace_id', workspaceId)
+
+  if (error) throw error
 }
