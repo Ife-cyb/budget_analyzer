@@ -4,6 +4,7 @@ import { useExpensesStore } from '../store/expenses'
 import SummaryCards from '../components/SummaryCards.vue'
 import ExpenseList from '../components/ExpenseList.vue'
 import Charts from '../components/Charts.vue'
+import BudgetPlanner from '../components/BudgetPlanner.vue'
 
 const store = useExpensesStore()
 const selectedCategory = ref('All')
@@ -52,6 +53,7 @@ function applyFilters() {
         <ExpenseList :expenses="store.filteredExpenses.slice(0, 8)" showHeader title="Recent Transactions" />
       </div>
       <div class="space-y-4">
+        <BudgetPlanner />
         <Charts type="pie" />
         <Charts type="bar" />
       </div>

@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns'
 
 const STORAGE_KEY = 'budget_analyzer_expenses_v1'
 const SETTINGS_KEY = 'budget_analyzer_settings_v1'
+const BUDGETS_KEY = 'budget_analyzer_budgets_v1'
 
 function loadFromStorage() {
   try {
@@ -38,6 +39,23 @@ function saveSettings(settings) {
   }
 }
 
+function loadBudgets() {
+  try {
+    const raw = localStorage.getItem(BUDGETS_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveBudgets(budgets) {
+  try {
+    localStorage.setItem(BUDGETS_KEY, JSON.stringify(budgets))
+  } catch {
+    // ignore
+  }
+}
+
 function seedData() {
   const today = new Date()
   const sample = [
@@ -62,6 +80,7 @@ export const useExpensesStore = defineStore('expenses', {
     settings: {
       currency: 'USD', // 'USD', 'NGN', 'GBP'
     },
+    budgets: {},
   }),
   getters: {
     filteredExpenses(state) {
@@ -88,6 +107,22 @@ export const useExpensesStore = defineStore('expenses', {
         buckets[month] = (buckets[month] || 0) + Number(e.amount)
       }
       return Object.entries(buckets).sort(([a], [b]) => (a > b ? 1 : -1))
+    },
+    budgetProgress(state) {
+      return Object.entries(state.budgets)
+        .filter(([, limit]) => Number(limit) > 0)
+        .map(([category, limit]) => {
+          const spent = this.filteredExpenses
+            .filter((e) => e.category === category)
+            .reduce((sum, e) => sum + Number(e.amount || 0), 0)
+          const numericLimit = Number(limit)
+          const percent = numericLimit > 0 ? (spent / numericLimit) * 100 : 0
+          return { category, limit: numericLimit, spent, percent, remaining: numericLimit - spent, overBudget: spent > numericLimit }
+        })
+        .sort((a, b) => b.percent - a.percent)
+    },
+    budgetAlerts() {
+      return this.budgetProgress.filter((row) => row.percent >= 80)
     },
     topCategory() {
       const byCat = this.spendByCategory
@@ -119,6 +154,12 @@ export const useExpensesStore = defineStore('expenses', {
         this.settings.currency = settings.currency
       } else {
         saveSettings(this.settings)
+      }
+      const budgets = loadBudgets()
+      if (budgets && typeof budgets === 'object' && !Array.isArray(budgets)) {
+        this.budgets = budgets
+      } else {
+        saveBudgets(this.budgets)
       }
     },
     validate(payload) {
@@ -161,6 +202,20 @@ export const useExpensesStore = defineStore('expenses', {
     setCurrency(code) {
       this.settings.currency = code
       saveSettings(this.settings)
+    },
+    setBudget(category, amount) {
+      const numericAmount = Number(amount)
+      if (!category || Number.isNaN(numericAmount) || numericAmount < 0) return
+      if (numericAmount === 0) {
+        delete this.budgets[category]
+      } else {
+        this.budgets[category] = numericAmount
+      }
+      saveBudgets(this.budgets)
+    },
+    removeBudget(category) {
+      delete this.budgets[category]
+      saveBudgets(this.budgets)
     },
     formatCurrency(value) {
       try {
