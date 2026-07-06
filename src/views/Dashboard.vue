@@ -30,14 +30,7 @@ function applyFilters() {
 
 <template>
   <div class="max-w-7xl mx-auto px-4 py-6 space-y-6">
-    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <h1 class="text-2xl font-semibold">Budget Analyzer</h1>
-      <nav class="flex gap-2">
-        <RouterLink to="/" class="px-3 py-2 rounded-md bg-primary text-white">Dashboard</RouterLink>
-        <RouterLink to="/add" class="px-3 py-2 rounded-md bg-gray-200">Add Expense</RouterLink>
-        <RouterLink to="/reports" class="px-3 py-2 rounded-md bg-gray-200">Reports</RouterLink>
-      </nav>
-    </header>
+    <h1 class="text-2xl font-semibold">Dashboard</h1>
 
     <p v-if="store.loading" class="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
       Loading your budget data...
