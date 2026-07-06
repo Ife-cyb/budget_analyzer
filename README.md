@@ -5,6 +5,7 @@ A responsive expense tracker built with Vue 3 (Composition API), Vite, Pinia, Vu
 ## Features
 - Add, edit, and delete expenses (description, category, amount, date)
 - Dashboard summary: total spent, top category, transaction count
+- Category-level monthly budgets with progress bars and over-budget alerts
 - Filters by category and month
 - Reports with pie (category breakdown) and bar (monthly trend) charts
 - Smooth transitions, responsive UI, modern Tailwind design
@@ -26,10 +27,11 @@ Open the dev server URL printed in the terminal.
 
 ## Project Structure
 - `src/store/expenses.js`: Pinia store with seed data and persistence
-- `src/components/`: `ExpenseForm.vue`, `ExpenseList.vue`, `SummaryCards.vue`, `Charts.vue`
+- `src/components/`: `ExpenseForm.vue`, `ExpenseList.vue`, `SummaryCards.vue`, `BudgetPlanner.vue`, `Charts.vue`
 - `src/views/`: `Dashboard.vue`, `AddExpense.vue`, `Reports.vue`
 - `src/router.js`: Routes `/`, `/add`, `/reports`
 
 ## Notes
 - Seed data is injected on first run; subsequent changes persist in LocalStorage.
 - Currency formatting defaults to the browser locale.
+- Budget limits are stored separately from expenses so users can adjust goals without changing transaction history.
