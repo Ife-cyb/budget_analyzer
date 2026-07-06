@@ -7,10 +7,13 @@ const store = useExpensesStore()
 const selectedCategory = ref('All')
 const selectedMonth = ref('All')
 
-onMounted(() => {
-  store.init()
-  selectedCategory.value = store.filters.category
-  selectedMonth.value = store.filters.month
+onMounted(async () => {
+  try {
+    await store.init()
+  } finally {
+    selectedCategory.value = store.filters.category
+    selectedMonth.value = store.filters.month
+  }
 })
 
 const categories = computed(() => ['All', ...store.categories])
@@ -29,6 +32,14 @@ function applyFilters() {
       <h2 class="text-xl font-semibold">Reports</h2>
       <RouterLink to="/" class="text-primary">Back to Dashboard</RouterLink>
     </header>
+
+    <p v-if="store.loading" class="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+      Loading your reports...
+    </p>
+
+    <p v-if="store.error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      {{ store.error }}
+    </p>
 
     <div class="flex flex-col sm:flex-row gap-3">
       <select v-model="selectedCategory" @change="applyFilters" class="px-3 py-2 rounded-md border border-gray-300 bg-white">
@@ -65,4 +76,4 @@ function applyFilters() {
       </div>
     </div>
   </div>
-</template> 
+</template>

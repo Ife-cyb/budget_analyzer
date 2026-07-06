@@ -4,6 +4,7 @@ import { useExpensesStore } from '../store/expenses'
 
 const props = defineProps({
   initial: { type: Object, default: null },
+  submitting: { type: Boolean, default: false },
 })
 const emit = defineEmits(['submit'])
 
@@ -70,7 +71,13 @@ function submitForm() {
       </div>
     </div>
     <div class="flex justify-end">
-      <button type="submit" class="px-4 py-2 rounded-md bg-primary text-white hover:opacity-90 transition">Save</button>
+      <button
+        type="submit"
+        class="px-4 py-2 rounded-md bg-primary text-white hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="props.submitting"
+      >
+        {{ props.submitting ? 'Saving...' : 'Save' }}
+      </button>
     </div>
   </form>
-</template> 
+</template>

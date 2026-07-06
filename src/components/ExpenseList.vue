@@ -17,11 +17,19 @@ const store = useExpensesStore()
 const formatted = computed(() => props.expenses.map(e => ({
   ...e,
   dateFormatted: e.date,
-  amountFormatted: useExpensesStore().formatCurrency(Number(e.amount)),
+  amountFormatted: store.formatCurrency(Number(e.amount)),
 })))
 
-function onDelete(id) {
-  store.removeExpense(id)
+async function onDelete(id) {
+  try {
+    await store.removeExpense(id)
+  } catch {
+    // Store-level error state is rendered by parent views.
+  }
+}
+
+function isDeleting(id) {
+  return store.deletingIds.includes(id)
 }
 
 function editAction(e) {
@@ -40,7 +48,10 @@ function editAction(e) {
       <h3 class="font-semibold">{{ title }}</h3>
       <RouterLink to="/add" class="text-sm text-primary">Add</RouterLink>
     </div>
-    <transition-group name="list" tag="ul" class="divide-y divide-gray-200">
+    <p v-if="formatted.length === 0" class="py-6 text-center text-sm text-gray-500">
+      No expenses yet.
+    </p>
+    <transition-group v-else name="list" tag="ul" class="divide-y divide-gray-200">
       <li v-for="e in formatted" :key="e.id" class="flex items-center justify-between py-3">
         <div class="min-w-0">
           <p class="font-medium truncate">{{ e.description }}</p>
@@ -49,7 +60,13 @@ function editAction(e) {
         <div class="flex items-center gap-3">
           <span class="font-semibold">{{ e.amountFormatted }}</span>
           <button @click="editAction(e)" class="text-sm text-blue-600 hover:underline">Edit</button>
-          <button @click="onDelete(e.id)" class="text-sm text-red-600 hover:underline">Delete</button>
+          <button
+            @click="onDelete(e.id)"
+            class="text-sm text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="isDeleting(e.id)"
+          >
+            {{ isDeleting(e.id) ? 'Deleting...' : 'Delete' }}
+          </button>
         </div>
       </li>
     </transition-group>
@@ -64,4 +81,4 @@ function editAction(e) {
   opacity: 0;
   transform: translateY(4px);
 }
-</style> 
+</style>

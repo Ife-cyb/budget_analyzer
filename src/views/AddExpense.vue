@@ -11,6 +11,8 @@ const router = useRouter()
 
 const editingId = ref(null)
 const formInitial = ref(null)
+const submitting = ref(false)
+const formError = ref('')
 
 function loadFromRoute() {
   const id = route.params.id
@@ -26,19 +28,31 @@ function loadFromRoute() {
   }
 }
 
-onMounted(() => {
-  store.init()
-  loadFromRoute()
+onMounted(async () => {
+  try {
+    await store.init()
+  } finally {
+    loadFromRoute()
+  }
 })
 
 watch(() => route.params.id, () => loadFromRoute())
 
-function onSubmit(values) {
-  if (editingId.value) {
-    store.updateExpense(editingId.value, values)
-    router.push('/')
-  } else {
-    store.addExpense(values)
+async function onSubmit(values) {
+  submitting.value = true
+  formError.value = ''
+
+  try {
+    if (editingId.value) {
+      await store.updateExpense(editingId.value, values)
+      router.push('/')
+    } else {
+      await store.addExpense(values)
+    }
+  } catch (error) {
+    formError.value = error?.message || store.error || 'Unable to save expense.'
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -54,12 +68,20 @@ function onEdit(expense) {
       <RouterLink to="/" class="text-primary">Back to Dashboard</RouterLink>
     </header>
 
+    <p v-if="store.loading" class="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+      Loading your budget data...
+    </p>
+
+    <p v-if="formError || store.error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      {{ formError || store.error }}
+    </p>
+
     <div class="bg-white rounded-lg shadow p-4">
-      <ExpenseForm :initial="formInitial" @submit="onSubmit" />
+      <ExpenseForm :initial="formInitial" :submitting="submitting || store.saving" @submit="onSubmit" />
     </div>
 
     <div class="bg-white rounded-lg shadow p-4">
       <ExpenseList :expenses="store.filteredExpenses" @edit="onEdit" />
     </div>
   </div>
-</template> 
+</template>

@@ -12,15 +12,27 @@ const form = reactive({
 const budgetRows = computed(() => store.budgetProgress)
 const hasBudgets = computed(() => budgetRows.value.length > 0)
 
-function saveBudget() {
+async function saveBudget() {
   const amount = Number(form.amount)
   if (!form.category || Number.isNaN(amount) || amount < 0) return
-  store.setBudget(form.category, amount)
-  form.amount = ''
+  try {
+    await store.setBudget(form.category, amount)
+    form.amount = ''
+  } catch {
+    // Store-level error state is rendered below.
+  }
 }
 
-function removeBudget(category) {
-  store.removeBudget(category)
+async function removeBudget(category) {
+  try {
+    await store.removeBudget(category)
+  } catch {
+    // Store-level error state is rendered below.
+  }
+}
+
+function isRemoving(category) {
+  return store.deletingBudgets.includes(category)
 }
 </script>
 
@@ -41,8 +53,18 @@ function removeBudget(category) {
       <label class="sr-only" for="budget-amount">Budget amount</label>
       <input id="budget-amount" v-model.number="form.amount" type="number" min="0" step="0.01" class="px-3 py-2 rounded-md border border-gray-300" placeholder="Monthly limit" />
 
-      <button type="submit" class="px-4 py-2 rounded-md bg-primary text-white hover:opacity-90 transition">Save Budget</button>
+      <button
+        type="submit"
+        class="px-4 py-2 rounded-md bg-primary text-white hover:opacity-90 transition disabled:cursor-not-allowed disabled:opacity-60"
+        :disabled="store.budgetSaving"
+      >
+        {{ store.budgetSaving ? 'Saving...' : 'Save Budget' }}
+      </button>
     </form>
+
+    <p v-if="store.error" class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      {{ store.error }}
+    </p>
 
     <div v-if="hasBudgets" class="space-y-3">
       <div v-for="row in budgetRows" :key="row.category" class="space-y-1.5">
@@ -53,7 +75,14 @@ function removeBudget(category) {
           </div>
           <div class="flex items-center gap-3">
             <span class="font-semibold" :class="row.overBudget ? 'text-red-600' : 'text-gray-700'">{{ row.percent.toFixed(0) }}%</span>
-            <button type="button" class="text-xs text-red-600 hover:underline" @click="removeBudget(row.category)">Remove</button>
+            <button
+              type="button"
+              class="text-xs text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="isRemoving(row.category)"
+              @click="removeBudget(row.category)"
+            >
+              {{ isRemoving(row.category) ? 'Removing...' : 'Remove' }}
+            </button>
           </div>
         </div>
         <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
